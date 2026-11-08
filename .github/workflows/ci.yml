@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: pip install -r requirements-dev.txt -e .
+      - name: Lint
+        run: ruff check .
+      - name: Test
+        run: python -m pytest -v
+      - name: Replay recorded evaluations
+        # Every cassette in results/ must still reproduce its report
+        run: |
+          shopt -s nullglob
+          for cassette in results/*.cassette.json; do
+            echo "Replaying $cassette"
+            triage replay "$cassette" --out /tmp/replay
+          done

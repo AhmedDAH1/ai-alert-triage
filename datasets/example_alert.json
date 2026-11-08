@@ -1,0 +1,31 @@
+{
+  "source": "email_gateway",
+  "title": "Phishing email: Urgent: Your account has been suspended",
+  "severity": "critical",
+  "description": "Threat score 100/100 (CRITICAL) from \"PayPal Security\" <security@paypa1-secure.com>. Indicators: Lookalike domain (paypa1-secure.com), SPF fail, Urgency language, Credential-harvesting link.",
+  "raw_data": {
+    "detector": "email-threat-analyzer",
+    "from": "\"PayPal Security\" <security@paypa1-secure.com>",
+    "subject": "Urgent: Your account has been suspended",
+    "recipient": "j.chen@example.org",
+    "threat_score": 100,
+    "urls": [
+      "http://paypa1-secure.com/verify-account"
+    ],
+    "attachments": [],
+    "authentication": {
+      "spf": "fail",
+      "dkim": "none",
+      "dmarc": "fail"
+    },
+    "indicators": [
+      "Lookalike domain (paypa1-secure.com)",
+      "SPF fail",
+      "Urgency language",
+      "Credential-harvesting link"
+    ]
+  },
+  "context": {
+    "org_domain": "example.org"
+  }
+}

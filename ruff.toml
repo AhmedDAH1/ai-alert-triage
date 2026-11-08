@@ -1,0 +1,9 @@
+line-length = 130
+
+[lint]
+select = ["E", "F", "W", "I", "B", "S", "UP"]
+
+[lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+# Alert data reads best as it appears in real logs
+"datasets/**" = ["E501", "UP031"]
