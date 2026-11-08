@@ -68,6 +68,8 @@ def cmd_eval(args):
         # so an interrupted run never leaves a cassette that looks finished.
         partial = final.with_name(final.name + ".partial")
         provider = providers.RecordingProvider(provider, partial)
+        if provider.resumed:
+            print(f"Resuming {partial.name}: {provider.resumed} answers already recorded", file=sys.stderr)
     results = evaluate.run(args.dataset, provider, modes=args.modes, workers=args.workers, progress=_progress)
     if final:
         partial.replace(final)

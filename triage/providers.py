@@ -77,18 +77,29 @@ def _key(messages):
 
 
 class RecordingProvider:
-    """Wraps a real provider and saves every answer to a cassette file."""
+    """Wraps a real provider and saves every answer to a cassette file.
+
+    An unfinished cassette from the same model is resumed: prompts it already
+    answered are not sent again, so an interrupted run continues where it
+    stopped. A cassette from another model is started afresh.
+    """
 
     def __init__(self, inner, cassette: Path):
         self.inner, self.cassette, self.name = inner, Path(cassette), inner.name
-        self.answers = json.loads(self.cassette.read_text()) if self.cassette.exists() else {"model": inner.name, "answers": {}}
+        saved = json.loads(self.cassette.read_text()) if self.cassette.exists() else {}
+        self.answers = saved if saved.get("model") == inner.name else {"model": inner.name, "answers": {}}
+        self.resumed = len(self.answers["answers"])
         self._lock = threading.Lock()     # the evaluation calls from several threads
         self.cassette.parent.mkdir(parents=True, exist_ok=True)
 
     def complete(self, messages):
+        key = _key(messages)
+        with self._lock:
+            if key in self.answers["answers"]:
+                return self.answers["answers"][key]
         answer = self.inner.complete(messages)
         with self._lock:
-            self.answers["answers"][_key(messages)] = answer
+            self.answers["answers"][key] = answer
             self.cassette.write_text(json.dumps(self.answers, indent=1, sort_keys=True))
         return answer
 

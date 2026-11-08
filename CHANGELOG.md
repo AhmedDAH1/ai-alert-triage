@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.2] - 2026-11-08
+
+### Added
+- An interrupted `--record` run resumes: running the same command again
+  sends only the prompts the unfinished cassette hasn't answered. A local 7B
+  model needs hours for a full run, and a laptop going to sleep shouldn't
+  cost all of it.
+
+### Removed
+- A Qwen report scored from an unfinished recording by the old replay, which
+  counted the missing answers as "needs investigation".
+
 ## [0.2.1] - 2026-11-08
 
 Fixes found by the first DeepSeek run. Its recorded answers were re-scored

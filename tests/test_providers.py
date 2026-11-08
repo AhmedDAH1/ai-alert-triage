@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from triage.providers import ChatProvider, ProviderError, ReplayProvider, from_settings
+from triage.providers import ChatProvider, ProviderError, RecordingProvider, ReplayProvider, from_settings
 
 
 class FakeAPI(BaseHTTPRequestHandler):
@@ -86,3 +86,33 @@ def test_replay_refuses_prompts_it_has_not_seen(tmp_path):
     cassette.write_text(json.dumps({"model": "m", "answers": {}}))
     with pytest.raises(ProviderError, match="record again"):
         ReplayProvider(cassette).complete([{"role": "user", "content": "new"}])
+
+
+class Counting:
+    name = "counting"
+
+    def __init__(self):
+        self.calls = 0
+
+    def complete(self, messages):
+        self.calls += 1
+        return "answer"
+
+
+def test_recording_resumes_an_unfinished_cassette(tmp_path):
+    cassette = tmp_path / "run.cassette.json.partial"
+    first, second = [{"role": "user", "content": "1"}], [{"role": "user", "content": "2"}]
+    RecordingProvider(Counting(), cassette).complete(first)          # then the run is interrupted
+    model = Counting()
+    resumed = RecordingProvider(model, cassette)
+    assert resumed.resumed == 1
+    resumed.complete(first)
+    resumed.complete(second)
+    assert model.calls == 1                                         # only the missing prompt was sent
+    assert len(json.loads(cassette.read_text())["answers"]) == 2
+
+
+def test_cassette_from_another_model_is_not_resumed(tmp_path):
+    cassette = tmp_path / "run.cassette.json.partial"
+    cassette.write_text(json.dumps({"model": "other", "answers": {"x": "y"}}))
+    assert RecordingProvider(Counting(), cassette).resumed == 0
