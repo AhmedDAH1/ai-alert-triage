@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from conftest import DATASET, ITEMS
 
 from triage import evaluate, guards, injections
@@ -85,9 +86,42 @@ def test_report_renders(oracle):
 
 def test_recorded_evaluation_replays_identically(tmp_path, oracle, monkeypatch):
     monkeypatch.setenv("TRIAGE_BOUNDARY_SECRET", "evaluation")
-    cassette = tmp_path / "oracle.json"
+    cassette = tmp_path / "oracle.cassette.json"
     recorded = evaluate.run(DATASET, RecordingProvider(oracle, cassette), modes=["guarded"], workers=2)
     main(["replay", str(cassette), "--modes", "guarded", "--out", str(tmp_path / "out")])
-    replayed = json.loads((tmp_path / "out" / "oracle_(replay).json").read_text())
-    assert replayed["modes"]["guarded"]["clean"] == recorded["modes"]["guarded"]["clean"]
-    assert replayed["modes"]["guarded"]["attack"]["dismissed"] == recorded["modes"]["guarded"]["attack"]["dismissed"]
+    # Named after the cassette, and identical to the live run's report, which CI checks
+    assert (tmp_path / "out" / "oracle.md").read_text() == evaluate.report(recorded)
+    replayed = json.loads((tmp_path / "out" / "oracle.json").read_text())
+    assert replayed["modes"]["guarded"] == recorded["modes"]["guarded"]
+
+
+def test_replay_of_an_unfinished_cassette_fails(tmp_path, oracle, monkeypatch):
+    monkeypatch.setenv("TRIAGE_BOUNDARY_SECRET", "evaluation")
+    cassette = tmp_path / "half.cassette.json"
+    evaluate.run(DATASET, RecordingProvider(oracle, cassette), modes=["guarded"], workers=2)
+    data = json.loads(cassette.read_text())
+    data["answers"] = dict(list(data["answers"].items())[: len(data["answers"]) // 2])
+    cassette.write_text(json.dumps(data))
+    with pytest.raises(SystemExit, match="unfinished"):
+        main(["replay", str(cassette), "--modes", "guarded", "--out", str(tmp_path / "out")])
+    assert not (tmp_path / "out" / "half.md").exists()
+
+
+def test_interrupted_recording_never_looks_finished(tmp_path, oracle, monkeypatch):
+    from triage import providers
+    monkeypatch.setattr(providers, "from_settings", lambda *a: oracle)
+    cassette = tmp_path / "run.cassette.json"
+    main(["eval", "--record", str(cassette), "--modes", "guarded", "--out", str(tmp_path / "out")])
+    assert cassette.exists() and not (tmp_path / "run.cassette.json.partial").exists()
+
+    class Crashes(type(oracle)):
+        def complete(self, messages):
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(providers, "from_settings", lambda *a: Crashes())
+    second = tmp_path / "second.cassette.json"
+    try:
+        main(["eval", "--record", str(second), "--modes", "guarded", "--out", str(tmp_path / "out2"), "--workers", "1"])
+    except KeyboardInterrupt:
+        pass
+    assert not second.exists()

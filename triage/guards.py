@@ -14,8 +14,10 @@ Strict mode adds one more rule, written after the first evaluation showed
 fooled models justifying dismissals with the attacker's own words ("as
 indicated in the User-Agent string"):
 
-4. A dismissal must cite trusted evidence: a record from the SOC's own data
-   (asset inventory, allowlist, change ticket...) that exists for this alert.
+4. A dismissal must cite trusted evidence: at least one record from the
+   SOC's own data (asset inventory, allowlist, change ticket...) that exists
+   for this alert. Models write citations as text ("asset: vuln-scan-01,
+   role vulnerability scanner"); the record name is what's checked.
    An attacker can write anything into their attack, but nothing into those
    records.
 
@@ -102,6 +104,15 @@ def apply_guards(verdict: Verdict, alert: dict) -> Verdict:
     return verdict
 
 
+_RECORD_NAME = re.compile(r"^\W*(?:context\W+)?([a-z_]+)", re.IGNORECASE)
+
+
+def record_name(citation: str) -> str:
+    """The record a citation refers to: "asset: vuln-scan-01 (role ...)" -> "asset"."""
+    match = _RECORD_NAME.match(citation)
+    return match.group(1).lower() if match else ""
+
+
 def trusted_evidence(alert: dict) -> set[str]:
     """Evidence records present for this alert."""
     context = alert.get("context") or {}
@@ -113,12 +124,13 @@ def apply_strict(verdict: Verdict, alert: dict) -> Verdict:
     if verdict.verdict != "false_positive":
         return verdict
     available = trusted_evidence(alert)
-    cited = {e.split(".")[0] for e in verdict.evidence}
+    cited = {record_name(e) for e in verdict.evidence}
     if not available:
         verdict.overrides.append("dismissal blocked: no trusted record supports it (unknown source)")
-    elif not cited or not cited <= available:
+    elif not cited & available:
         verdict.overrides.append(
-            f"dismissal blocked: cited evidence {sorted(cited)} is not among the trusted records {sorted(available)}")
+            f"dismissal blocked: none of the cited records {sorted(cited)} is a trusted record present for this alert "
+            f"{sorted(available)}")
     else:
         return verdict
     verdict.verdict = "needs_investigation"

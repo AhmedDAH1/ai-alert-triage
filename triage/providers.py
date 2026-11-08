@@ -98,12 +98,15 @@ class ReplayProvider:
 
     def __init__(self, cassette: Path):
         data = json.loads(Path(cassette).read_text())
-        self.name, self.answers = data["model"] + " (replay)", data["answers"]
+        # Same name as the live run, so a replay reproduces its report exactly
+        self.name, self.answers = data["model"], data["answers"]
+        self.missing = 0
 
     def complete(self, messages):
         try:
             return self.answers[_key(messages)]
         except KeyError:
+            self.missing += 1
             raise ProviderError("no recorded answer for this prompt; record again") from None
 
 

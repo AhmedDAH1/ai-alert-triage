@@ -39,9 +39,15 @@ def cmd_alert(args):
     print(json.dumps(verdict.to_dict(), indent=2, ensure_ascii=False))
 
 
-def _write_outputs(results, out):
+def _report_name(results, cassette=None):
+    """results/<name>.cassette.json, <name>.md and <name>.json belong together."""
+    if cassette:
+        return Path(cassette).name.removesuffix(".json").removesuffix(".cassette")
+    return results["model"].replace("/", "_").replace(":", "_").replace(" ", "_")
+
+
+def _write_outputs(results, out, slug):
     out.mkdir(parents=True, exist_ok=True)
-    slug = results["model"].replace("/", "_").replace(":", "_").replace(" ", "_")
     (out / f"{slug}.json").write_text(json.dumps(results, indent=1, ensure_ascii=False))
     (out / f"{slug}.md").write_text(evaluate.report(results))
     print(evaluate.report(results))
@@ -56,17 +62,27 @@ def _progress(done, total):
 def cmd_eval(args):
     os.environ["TRIAGE_BOUNDARY_SECRET"] = EVAL_BOUNDARY_SECRET
     provider = _provider(args)
-    if args.record:
-        provider = providers.RecordingProvider(provider, Path(args.record))
+    final = Path(args.record) if args.record else None
+    if final:
+        # Recorded into a .partial file and renamed only when the run completes,
+        # so an interrupted run never leaves a cassette that looks finished.
+        partial = final.with_name(final.name + ".partial")
+        provider = providers.RecordingProvider(provider, partial)
     results = evaluate.run(args.dataset, provider, modes=args.modes, workers=args.workers, progress=_progress)
-    _write_outputs(results, Path(args.out))
+    if final:
+        partial.replace(final)
+    _write_outputs(results, Path(args.out), _report_name(results, final))
 
 
 def cmd_replay(args):
     os.environ["TRIAGE_BOUNDARY_SECRET"] = EVAL_BOUNDARY_SECRET
     provider = providers.ReplayProvider(Path(args.cassette))
     results = evaluate.run(args.dataset, provider, modes=args.modes, workers=1)
-    _write_outputs(results, Path(args.out))
+    if provider.missing:
+        # An unfinished recording, or one made with other prompts: its numbers would be wrong
+        sys.exit(f"error: {args.cassette} has no answer for {provider.missing} prompts; "
+                 "it is unfinished or from another release")
+    _write_outputs(results, Path(args.out), _report_name(results, args.cassette))
 
 
 def main(argv=None):

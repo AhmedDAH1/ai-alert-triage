@@ -19,10 +19,12 @@ jobs:
       - name: Test
         run: python -m pytest -v
       - name: Replay recorded evaluations
-        # Every cassette in results/ must still reproduce its report
+        # Every cassette in results/ must be complete and reproduce its published report exactly
         run: |
           shopt -s nullglob
           for cassette in results/*.cassette.json; do   # current release only; older ones live in results/<version>/
+            name=$(basename "$cassette" .cassette.json)
             echo "Replaying $cassette"
-            triage replay "$cassette" --out /tmp/replay
+            triage replay "$cassette" --out /tmp/replay > /dev/null
+            diff -u "results/$name.md" "/tmp/replay/$name.md"
           done

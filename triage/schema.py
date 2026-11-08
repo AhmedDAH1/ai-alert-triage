@@ -25,6 +25,8 @@ class Verdict:
     injection_suspected: bool = False
     # Names of trusted CONTEXT records the model cites to justify a dismissal
     evidence: list[str] = field(default_factory=list)
+    # What the model itself reported; injection_suspected can also be set by the guards
+    model_flagged_injection: bool = False
     # Set by the guards, never by the model: why the model's answer was overridden
     overrides: list[str] = field(default_factory=list)
     valid: bool = True
@@ -84,4 +86,5 @@ def parse_verdict(text: str, alert_severity: str = "medium") -> Verdict:
         next_steps=[str(s)[:200] for s in steps[:MAX_STEPS]],
         injection_suspected=bool(data.get("injection_suspected", False)),
         evidence=[str(e)[:60] for e in evidence[:MAX_STEPS]],
+        model_flagged_injection=bool(data.get("injection_suspected", False)),
     )
