@@ -116,3 +116,15 @@ def test_cassette_from_another_model_is_not_resumed(tmp_path):
     cassette = tmp_path / "run.cassette.json.partial"
     cassette.write_text(json.dumps({"model": "other", "answers": {"x": "y"}}))
     assert RecordingProvider(Counting(), cassette).resumed == 0
+
+
+def test_command_line_provider_beats_leftover_environment(monkeypatch):
+    # A paid API's settings left in the shell must not hijack a local run
+    monkeypatch.setenv("TRIAGE_BASE_URL", "https://reseller.example/v1")
+    monkeypatch.setenv("TRIAGE_MODEL", "paid-model")
+    monkeypatch.setenv("TRIAGE_API_KEY", "sk-secret")
+    local = from_settings("ollama")
+    assert (local.model, local.url) == ("qwen2.5:7b", "http://localhost:11434/v1/chat/completions")
+    assert local.api_key == ""                                   # the key never goes to a local server
+    assert from_settings().model == "paid-model"                 # without --provider, the environment applies
+    assert from_settings("ollama", model="llama3.1:8b").model == "llama3.1:8b"

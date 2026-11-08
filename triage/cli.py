@@ -27,9 +27,11 @@ EVAL_BOUNDARY_SECRET = "evaluation"  # noqa: S105 - not a credential
 
 def _provider(args):
     try:
-        return providers.from_settings(args.provider, args.model, args.base_url)
+        provider = providers.from_settings(args.provider, args.model, args.base_url)
     except ValueError as e:
         sys.exit(f"error: {e}")
+    print(f"Model {provider.name} at {getattr(provider, 'url', '?')}", file=sys.stderr)   # a wrong target is obvious
+    return provider
 
 
 def cmd_alert(args):
@@ -71,6 +73,11 @@ def cmd_eval(args):
         if provider.resumed:
             print(f"Resuming {partial.name}: {provider.resumed} answers already recorded", file=sys.stderr)
     results = evaluate.run(args.dataset, provider, modes=args.modes, workers=args.workers, progress=_progress)
+    if final and provider.failed:
+        # Unanswered prompts would be scored as "needs investigation" and look like caution
+        sys.exit(f"error: {provider.failed} prompts got no answer (timeout or outage), so no report was written.\n"
+                 f"The {len(provider.answers['answers'])} answers so far are saved in {partial}; "
+                 "run the same command again to ask only the missing ones (for a local model, try --workers 1).")
     if final:
         partial.replace(final)
     _write_outputs(results, Path(args.out), _report_name(results, final))

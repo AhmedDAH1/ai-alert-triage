@@ -89,6 +89,7 @@ class RecordingProvider:
         saved = json.loads(self.cassette.read_text()) if self.cassette.exists() else {}
         self.answers = saved if saved.get("model") == inner.name else {"model": inner.name, "answers": {}}
         self.resumed = len(self.answers["answers"])
+        self.failed = 0                   # prompts that got no answer (timeout, outage)
         self._lock = threading.Lock()     # the evaluation calls from several threads
         self.cassette.parent.mkdir(parents=True, exist_ok=True)
 
@@ -97,7 +98,12 @@ class RecordingProvider:
         with self._lock:
             if key in self.answers["answers"]:
                 return self.answers["answers"][key]
-        answer = self.inner.complete(messages)
+        try:
+            answer = self.inner.complete(messages)
+        except ProviderError:
+            with self._lock:
+                self.failed += 1
+            raise
         with self._lock:
             self.answers["answers"][key] = answer
             self.cassette.write_text(json.dumps(self.answers, indent=1, sort_keys=True))
@@ -122,15 +128,30 @@ class ReplayProvider:
 
 
 def from_settings(preset: str | None = None, model: str | None = None, base_url: str | None = None):
-    """Build a provider from a preset name and/or TRIAGE_* environment variables."""
-    settings = dict(PRESETS.get(preset or os.environ.get("TRIAGE_PROVIDER", ""), {}))
+    """Build a provider from a preset (--provider) or TRIAGE_* environment variables.
+
+    What is typed on the command line wins: with --provider, a TRIAGE_MODEL or
+    TRIAGE_BASE_URL left in the shell from another run is ignored, so a local
+    run can't quietly go to a paid API.
+    """
     if preset and preset not in PRESETS:
         raise ValueError(f"unknown provider {preset!r}; choose from {', '.join(PRESETS)}")
-    settings["base_url"] = base_url or os.environ.get("TRIAGE_BASE_URL") or settings.get("base_url")
-    settings["model"] = model or os.environ.get("TRIAGE_MODEL") or settings.get("model")
+    if preset:
+        settings = dict(PRESETS[preset])
+    else:
+        settings = dict(PRESETS.get(os.environ.get("TRIAGE_PROVIDER", ""), {}))
+        settings["base_url"] = os.environ.get("TRIAGE_BASE_URL") or settings.get("base_url")
+        settings["model"] = os.environ.get("TRIAGE_MODEL") or settings.get("model")
+    settings["base_url"] = base_url or settings.get("base_url")
+    settings["model"] = model or settings.get("model")
     if not settings["base_url"] or not settings["model"]:
         raise ValueError("choose a provider (--provider deepseek|kimi|ollama) or set TRIAGE_BASE_URL and TRIAGE_MODEL")
-    api_key = os.environ.get("TRIAGE_API_KEY", "")
-    if not api_key and "localhost" not in settings["base_url"] and "127.0.0.1" not in settings["base_url"]:
+    host = urlparse(settings["base_url"]).hostname or ""
+    local = host in ("localhost", "127.0.0.1", "::1")
+    # The key is never sent to a local server
+    api_key = "" if local else os.environ.get("TRIAGE_API_KEY", "")
+    if not api_key and not local:
         raise ValueError("set TRIAGE_API_KEY to your provider's API key")
-    return ChatProvider(settings["base_url"], settings["model"], api_key)
+    # A local model on a laptop can take minutes per answer when requests queue up
+    timeout = int(os.environ.get("TRIAGE_TIMEOUT") or (600 if local else 60))
+    return ChatProvider(settings["base_url"], settings["model"], api_key, timeout=timeout)

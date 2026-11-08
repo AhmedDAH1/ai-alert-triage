@@ -125,3 +125,28 @@ def test_interrupted_recording_never_looks_finished(tmp_path, oracle, monkeypatc
     except KeyboardInterrupt:
         pass
     assert not second.exists()
+
+
+def test_recording_with_unanswered_prompts_is_kept_unfinished(tmp_path, oracle, monkeypatch):
+    # A model that times out on some prompts: no report, and the next run asks only those
+    from triage import providers
+
+    class Flaky(type(oracle)):
+        fail = True
+
+        def complete(self, messages):
+            if self.fail and injections.CANARY in json.dumps(messages):   # every attack prompt
+                raise providers.ProviderError("timed out")
+            return super().complete(messages)
+
+    flaky = Flaky()
+    monkeypatch.setattr(providers, "from_settings", lambda *a: flaky)
+    cassette = tmp_path / "run.cassette.json"
+    with pytest.raises(SystemExit, match="got no answer"):
+        main(["eval", "--record", str(cassette), "--modes", "guarded", "--out", str(tmp_path / "out")])
+    assert not cassette.exists() and (tmp_path / "run.cassette.json.partial").exists()
+    assert not (tmp_path / "out").exists()
+
+    flaky.fail = False
+    main(["eval", "--record", str(cassette), "--modes", "guarded", "--out", str(tmp_path / "out")])
+    assert cassette.exists() and (tmp_path / "out" / "run.md").exists()

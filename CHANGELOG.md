@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.2.3] - 2026-11-08
+
+### Fixed
+- A recording where some prompts got no answer was saved as finished, and
+  the missing answers were scored as "needs investigation". The local Qwen
+  run hit this: with several requests queued, Ollama took longer than the
+  60-second timeout on 128 of the 136 attack prompts in hardened mode. Such a
+  run now writes no report, keeps its `.partial` cassette, and running the
+  same command again asks only the missing prompts.
+- `--provider` now wins over `TRIAGE_MODEL` and `TRIAGE_BASE_URL` left in the
+  shell. A local Qwen run was silently sent to the paid DeepSeek reseller
+  because those were still set from the previous run. The command now prints
+  which model and address it uses, and never sends the API key to a local
+  server.
+- Local models get a 10-minute timeout (cloud APIs keep 60 seconds);
+  `TRIAGE_TIMEOUT` overrides both.
+
 ## [0.2.2] - 2026-11-08
 
 ### Added

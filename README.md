@@ -181,17 +181,18 @@ triage alert datasets/example_alert.json --provider deepseek
 | `deepseek` | deepseek-flash | Cheapest; one full evaluation (about 650 requests) costs well under $1 |
 | `deepseek-pro` | deepseek-v4-pro | Stronger model, a few times the price |
 | `kimi` | kimi-k2.5 | Moonshot AI |
-| `ollama` | qwen2.5:7b | Runs locally with [Ollama](https://ollama.com), free, no key |
+| `ollama` | qwen2.5:7b | Runs locally with [Ollama](https://ollama.com), free, no key; use `--workers 1` on a laptop |
 
 Any other OpenAI-compatible API, including resellers, works with
-`TRIAGE_BASE_URL` and `TRIAGE_MODEL`. `--modes guarded` runs one mode only; `--workers` sets
+`TRIAGE_BASE_URL` and `TRIAGE_MODEL` (used when no `--provider` is given). `--modes guarded` runs one mode only; `--workers` sets
 parallel requests.
 
 `--record` saves every answer to a cassette. `triage replay <cassette>`
 re-runs the evaluation from it without a key or network, so a recorded run
 can be checked in CI and anyone can reproduce the published numbers. A replay
 fails if any answer is missing, so an unfinished recording can't publish
-numbers. `results/<name>.cassette.json` produces `results/<name>.md`.
+numbers. If prompts time out during `--record`, no report is written and
+running the same command again asks only the missing ones. `results/<name>.cassette.json` produces `results/<name>.md`.
 Cassettes match the prompts of the release that recorded them: results from
 an older release are kept in `results/<version>/` and replay after
 `git checkout <version>`.
