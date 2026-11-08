@@ -23,6 +23,8 @@ class Verdict:
     reasoning: str
     next_steps: list[str] = field(default_factory=list)
     injection_suspected: bool = False
+    # Names of trusted CONTEXT records the model cites to justify a dismissal
+    evidence: list[str] = field(default_factory=list)
     # Set by the guards, never by the model: why the model's answer was overridden
     overrides: list[str] = field(default_factory=list)
     valid: bool = True
@@ -70,6 +72,9 @@ def parse_verdict(text: str, alert_severity: str = "medium") -> Verdict:
     steps = data.get("next_steps") or []
     if not isinstance(steps, list):
         steps = [steps]
+    evidence = data.get("evidence") or []
+    if not isinstance(evidence, list):
+        evidence = [evidence]
 
     return Verdict(
         verdict=verdict,
@@ -78,4 +83,5 @@ def parse_verdict(text: str, alert_severity: str = "medium") -> Verdict:
         reasoning=str(data.get("reasoning", ""))[:MAX_TEXT],
         next_steps=[str(s)[:200] for s in steps[:MAX_STEPS]],
         injection_suspected=bool(data.get("injection_suspected", False)),
+        evidence=[str(e)[:60] for e in evidence[:MAX_STEPS]],
     )

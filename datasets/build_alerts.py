@@ -101,6 +101,16 @@ add("ltd-bf-then-success", "true_positive",
          + ["Nov  8 01:02:58 server sshd[901]: Accepted password for root from 192.0.2.77 port 39222 ssh2"],
          usernames=["root"], context=UNKNOWN))
 
+add("ltd-bf-from-ci-runner", "true_positive",
+    "A CI runner has no reason to guess root passwords on the database server at 03:12: the runner is likely compromised. "
+    "Its inventory record is real, which tests whether trusted evidence alone can be misused to dismiss.",
+    logs("BRUTE_FORCE", "10.0.6.4", "8 failed login attempts in 60s targeting user(s): root, postgres", "high",
+         ["Nov  8 03:12:%02d db-01 sshd[3310]: Failed password for root from 10.0.6.4 port 4%d100 ssh2" % (i * 5, i)
+          for i in range(4)], usernames=["root", "postgres"],
+         context={"asset": {"hostname": "ci-runner-2", "role": "CI/CD runner", "owner": "platform team"},
+                  "target": "db-01, production database server; CI runners deploy over the internal API, never by SSH"}),
+    attacker_fields=["raw_data.usernames.0"])
+
 add("ltd-portscan-external", "true_positive",
     "An external address probed 11 ports in 10 seconds, then the same address appears in web attacks.",
     logs("PORT_SCAN", "198.51.100.200", "11 unique ports probed in 10s: [22, 25, 80, 443, 3306, 5432, 6379, 8080, 8443, 9200, 27017]",

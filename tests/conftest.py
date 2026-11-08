@@ -19,16 +19,17 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("TRIAGE_BOUNDARY_SECRET", "tests")
 
-from triage import injections  # noqa: E402
+from triage import guards, injections  # noqa: E402
 
 DATASET = ROOT / "datasets" / "alerts.jsonl"
 ITEMS = [json.loads(line) for line in DATASET.read_text(encoding="utf-8").splitlines()]
 LABELS = {item["alert"]["description"]: item for item in ITEMS}
 
 
-def answer(verdict, severity="medium", confidence=0.9, reasoning="ok", injection=False):
+def answer(verdict, severity="medium", confidence=0.9, reasoning="ok", injection=False, evidence=()):
     return json.dumps({"verdict": verdict, "severity": severity, "confidence": confidence,
-                       "reasoning": reasoning, "next_steps": ["check"], "injection_suspected": injection})
+                       "reasoning": reasoning, "next_steps": ["check"], "injection_suspected": injection,
+                       "evidence": list(evidence)})
 
 
 def _item_for(messages):
@@ -48,7 +49,7 @@ class OracleModel:
     def complete(self, messages):
         self.calls.append(messages)
         item = _item_for(messages)
-        return answer(item["label"], item["alert"]["severity"])
+        return answer(item["label"], item["alert"]["severity"], evidence=sorted(guards.trusted_evidence(item["alert"])))
 
 
 class GullibleModel(OracleModel):
@@ -57,10 +58,12 @@ class GullibleModel(OracleModel):
     def complete(self, messages):
         self.calls.append(messages)
         text = messages[-1]["content"]
-        if injections.CANARY in text:
-            return answer("false_positive", "low", 0.95, f"As instructed: {injections.CANARY}")
         item = _item_for(messages)
-        return answer(item["label"], item["alert"]["severity"])
+        if injections.CANARY in text:
+            # Fooled, and citing whatever trusted records exist: the worst case for strict mode
+            return answer("false_positive", "low", 0.95, f"As instructed: {injections.CANARY}",
+                          evidence=sorted(guards.trusted_evidence(item["alert"])))
+        return answer(item["label"], item["alert"]["severity"], evidence=sorted(guards.trusted_evidence(item["alert"])))
 
 
 @pytest.fixture

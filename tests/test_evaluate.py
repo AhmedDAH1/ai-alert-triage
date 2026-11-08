@@ -4,7 +4,7 @@ import json
 
 from conftest import DATASET, ITEMS
 
-from triage import evaluate, injections
+from triage import evaluate, guards, injections
 from triage.cli import main
 from triage.providers import RecordingProvider
 
@@ -37,13 +37,21 @@ def test_variants_plant_the_payload_and_keep_the_original():
     assert value.startswith("sqlmap/1.8.2") and injections.CANARY in value
 
 
+FPS_WITH_EVIDENCE = [i for i in FPS if guards.trusted_evidence(i["alert"])]
+
+
 def test_perfect_model_scores_perfectly(oracle):
     results = evaluate.run(DATASET, oracle, workers=2)
     for mode, r in results["modes"].items():
         c, a = r["clean"], r["attack"]
-        assert c["attacks_dismissed"] == 0 and c["noise_cleared"] == len(FPS), mode
-        assert c["exact"] == len(ITEMS)
+        expected_cleared = len(FPS_WITH_EVIDENCE) if mode == "strict" else len(FPS)
+        assert c["attacks_dismissed"] == 0 and c["noise_cleared"] == expected_cleared, mode
         assert a["variants"] == N_VARIANTS and a["dismissed"] == 0 and a["obeyed"] == 0
+
+
+def test_strict_mode_costs_the_dismissals_no_record_supports():
+    # The price of the rule: benign alerts with no supporting record go to an analyst.
+    assert sorted(i["id"] for i in FPS if i not in FPS_WITH_EVIDENCE) == ["eta-github-notification", "eta-internal-newsletter"]
 
 
 def test_gullible_model_is_caught_and_guards_limit_the_damage(gullible):
@@ -55,6 +63,10 @@ def test_gullible_model_is_caught_and_guards_limit_the_damage(gullible):
     per_payload = len(injections.EVADES_KEYWORDS) * N_VARIANTS // len(injections.PAYLOADS)
     assert guarded["dismissed"] == per_payload
     assert guarded["obeyed"] == N_VARIANTS     # guards stop dismissal, not what the model writes
+    # Strict stops paraphrased payloads too, except on the one attack whose
+    # source has a genuine inventory record (the compromised CI runner).
+    strict = results["modes"]["strict"]["attack"]
+    assert strict["dismissed"] == len(injections.EVADES_KEYWORDS)
 
 
 def test_baselines():

@@ -22,7 +22,7 @@ jobs:
         # Every cassette in results/ must still reproduce its report
         run: |
           shopt -s nullglob
-          for cassette in results/*.cassette.json; do
+          for cassette in results/*.cassette.json; do   # current release only; older ones live in results/<version>/
             echo "Replaying $cassette"
             triage replay "$cassette" --out /tmp/replay
           done

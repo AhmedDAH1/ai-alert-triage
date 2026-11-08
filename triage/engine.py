@@ -5,13 +5,14 @@ Modes, from weakest to strongest (the evaluation compares all three):
 - naive:    everything pasted into one prompt
 - hardened: untrusted data fenced and labelled, model told not to obey it
 - guarded:  hardened prompt plus deterministic guards (guards.py)
+- strict:   guarded, and a dismissal must cite a trusted record (guards.py)
 """
 
 from triage import guards, prompts
 from triage.providers import ProviderError
 from triage.schema import Verdict, fallback, parse_verdict
 
-MODES = ("naive", "hardened", "guarded")
+MODES = ("naive", "hardened", "guarded", "strict")
 
 
 def triage(alert: dict, provider, mode: str = "guarded") -> Verdict:
@@ -25,4 +26,6 @@ def triage(alert: dict, provider, mode: str = "guarded") -> Verdict:
         verdict = fallback(f"model unavailable ({e})", severity)
     if mode == "guarded":
         verdict = guards.apply_guards(verdict, alert)
+    elif mode == "strict":
+        verdict = guards.apply_strict(verdict, alert)
     return verdict

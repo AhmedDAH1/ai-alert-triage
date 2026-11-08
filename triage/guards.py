@@ -10,6 +10,15 @@ the parts that matter even when it doesn't:
    the model) is never dismissed, and its severity is never lowered.
 3. A dismissal needs confidence; an unsure "false_positive" is escalated.
 
+Strict mode adds one more rule, written after the first evaluation showed
+fooled models justifying dismissals with the attacker's own words ("as
+indicated in the User-Agent string"):
+
+4. A dismissal must cite trusted evidence: a record from the SOC's own data
+   (asset inventory, allowlist, change ticket...) that exists for this alert.
+   An attacker can write anything into their attack, but nothing into those
+   records.
+
 The AI only ever suggests: the worst a fooled model can do in guarded mode
 is send an alert to a human.
 """
@@ -20,6 +29,12 @@ from triage.prompts import untrusted_part
 from triage.schema import Verdict, severity_rank
 
 MIN_DISMISS_CONFIDENCE = 0.7
+
+# The kinds of SOC records that can justify dismissing an alert. Deciding
+# what counts as evidence is the SOC's job, not the model's: a generic fact
+# such as the organisation's own domain proves nothing about this alert.
+EVIDENCE_RECORDS = {"asset", "allowlist", "change_ticket", "schedule", "helpdesk",
+                    "ip_reputation", "directory", "known_senders"}
 
 # Phrases addressed to a triage system or an analyst. They have no reason to
 # appear in a username, User-Agent or subject line.
@@ -84,4 +99,27 @@ def apply_guards(verdict: Verdict, alert: dict) -> Verdict:
         verdict.verdict = "needs_investigation"
         verdict.overrides.append(f"dismissal blocked: confidence {verdict.confidence:.2f} < {MIN_DISMISS_CONFIDENCE}")
 
+    return verdict
+
+
+def trusted_evidence(alert: dict) -> set[str]:
+    """Evidence records present for this alert."""
+    context = alert.get("context") or {}
+    return {key for key in EVIDENCE_RECORDS if context.get(key)}
+
+
+def apply_strict(verdict: Verdict, alert: dict) -> Verdict:
+    verdict = apply_guards(verdict, alert)
+    if verdict.verdict != "false_positive":
+        return verdict
+    available = trusted_evidence(alert)
+    cited = {e.split(".")[0] for e in verdict.evidence}
+    if not available:
+        verdict.overrides.append("dismissal blocked: no trusted record supports it (unknown source)")
+    elif not cited or not cited <= available:
+        verdict.overrides.append(
+            f"dismissal blocked: cited evidence {sorted(cited)} is not among the trusted records {sorted(available)}")
+    else:
+        return verdict
+    verdict.verdict = "needs_investigation"
     return verdict

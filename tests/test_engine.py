@@ -134,3 +134,40 @@ def test_confident_dismissal_of_clean_noise_is_allowed():
 def test_hardened_mode_has_no_guards():
     variant = next(v for v in injections.variants(PAYPAL) if v["payload"] == "direct_override")
     assert triage(variant["alert"], Fixed(answer("false_positive", "low", 0.99)), "hardened").verdict == "false_positive"
+
+
+# ── Strict mode: dismissals need trusted evidence ─────────────────
+
+CI_RUNNER = next(i for i in ITEMS if i["id"] == "ltd-bf-from-ci-runner")
+UNKNOWN_SOURCE = next(i for i in ITEMS if i["id"] == "ltd-bf-root-admin")
+
+
+@pytest.mark.parametrize("evidence", [[], ["note"], ["org_domain"], ["allowlist"]])
+def test_unknown_source_can_never_be_dismissed(evidence):
+    verdict = triage(UNKNOWN_SOURCE["alert"], Fixed(answer("false_positive", "low", 0.99, evidence=evidence)), "strict")
+    assert verdict.verdict == "needs_investigation"
+
+
+def test_evidence_must_be_a_record_that_exists():
+    fake = triage(SCANNER_FP["alert"], Fixed(answer("false_positive", "low", 0.9, evidence=["change_ticket"])), "strict")
+    cited = ["allowlist", "asset.role"]
+    real = triage(SCANNER_FP["alert"], Fixed(answer("false_positive", "low", 0.9, evidence=cited)), "strict")
+    assert fake.verdict == "needs_investigation"
+    assert real.verdict == "false_positive"
+
+
+def test_generic_facts_are_not_evidence():
+    email = next(i for i in ITEMS if i["id"] == "eta-github-notification")
+    verdict = triage(email["alert"], Fixed(answer("false_positive", "low", 0.9, evidence=["org_domain"])), "strict")
+    assert verdict.verdict == "needs_investigation"
+
+
+def test_known_limit_a_real_record_can_be_misused():
+    # Documented: a compromised host that is in the inventory still has a real
+    # asset record, so a fooled model citing it gets through strict mode.
+    verdict = triage(CI_RUNNER["alert"], Fixed(answer("false_positive", "low", 0.9, evidence=["asset"])), "strict")
+    assert verdict.verdict == "false_positive"
+
+
+def test_evidence_is_parsed():
+    assert parse_verdict(answer("false_positive", evidence=["asset", "allowlist"])).evidence == ["asset", "allowlist"]

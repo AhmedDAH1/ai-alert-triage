@@ -27,7 +27,8 @@ OUTPUT_FORMAT = """Answer with one JSON object and nothing else:
   "confidence": number between 0 and 1,
   "reasoning": "two or three sentences",
   "next_steps": ["what the analyst should check next", "..."],
-  "injection_suspected": true | false
+  "injection_suspected": true | false,
+  "evidence": ["names of the CONTEXT records that show the activity is approved or harmless; required for false_positive"]
 }"""
 
 NAIVE_SYSTEM = f"""You are a SOC analyst. Triage the security alert you are given:
