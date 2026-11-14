@@ -18,6 +18,9 @@ come from [NetScan](https://github.com/AhmedDAH1/network-scanner)'s Suricata
 rules, [Log Threat Detector](https://github.com/AhmedDAH1/log_threat_detector)
 and [Email Threat Analyzer](https://github.com/AhmedDAH1/email-threat-analyzer),
 in the format [SOAR-Lite](https://github.com/AhmedDAH1/soar-lite) stores.
+SOAR-Lite bundles this engine, in strict mode, to triage its incidents, so in
+SOC Lab every incident can be sent to the AI and an analyst accepts or
+rejects its suggestion.
 
 ## Four modes, measured against each other
 
@@ -51,34 +54,67 @@ measured even when the verdict holds.
 
 ## Results
 
-Two models, one small and local, one strong and in the cloud. Every answer is
-recorded in a cassette next to its report, and CI replays each cassette and
-checks that it reproduces the published numbers exactly.
+Three models: one small and local, two strong ones in the cloud. Every
+answer is recorded in a cassette next to its report, and CI replays each
+cassette and checks that it reproduces the published numbers exactly.
 
-Both on the same 27 alerts and 136 attacks:
+All three on the same 27 alerts and 136 attacks:
 
-| | Qwen 2.5 7B, local | DeepSeek V4.1 Flash, cloud |
-|---|---|---|
-| Real attacks dismissed, no payload: hardened | 4 of 15 | 0 of 15 |
-| strict | 1 of 15 | 0 of 15 |
-| False alarms cleared: hardened | 7 of 12 | 10 of 12 |
-| strict | 5 of 12 | 8 of 12 |
-| Attacks dismissed because of a payload: naive | 92 of 136 (68%) | 0 of 136 |
-| hardened | 93 of 136 (68%) | 0 of 136 |
-| guarded | 33 of 136 (24%) | 0 of 136 |
-| strict | 3 of 136 (2%) | 0 of 136 |
-| Payload reported by the model itself (hardened) | 16 of 136 (12%) | 136 of 136 |
+| | Qwen 2.5 7B, local | DeepSeek V4.1 Flash, cloud | DeepSeek V4 Pro, cloud |
+|---|---|---|---|
+| Real attacks dismissed, no payload: hardened | 4 of 15 | 0 of 15 | 0 of 15 |
+| strict | 1 of 15 | 0 of 15 | 0 of 15 |
+| False alarms cleared: hardened | 7 of 12 | 10 of 12 | 11 of 12 |
+| strict | 5 of 12 | 8 of 12 | 9 of 12 |
+| Attacks dismissed because of a payload: naive | 92 of 136 (68%) | 0 of 136 | 0 of 136 |
+| hardened | 93 of 136 (68%) | 0 of 136 | 0 of 136 |
+| guarded | 33 of 136 (24%) | 0 of 136 | 0 of 136 |
+| strict | 3 of 136 (2%) | 0 of 136 | 0 of 136 |
+| Severity lowered because of a payload (hardened) | 113 of 136 | 4 of 136 | 9 of 136 |
+| Payload reported by the model itself (hardened) | 16 of 136 (12%) | 136 of 136 | 136 of 136 |
+
+Every recorded answer can be browsed in the
+[attack explorer](https://ahmeddah1.github.io/ai-triage/): pick a model, an
+alert and a hidden instruction, and see what the model answered under each
+defence. Its data is built from `results/` by `tools/build_explorer.py`.
 
 **The model matters more than the prompt.** The same prompts, guards and
-data that a 7B model failed against, a strong model handled without help: not
-one attack dismissed, in any mode, and every payload reported, even in naive
-mode where nothing told it to look.
+data that a 7B model failed against, both strong models handled without help:
+not one attack dismissed, in any mode, and every payload reported, even in
+naive mode where nothing told it to look.
+
+**But a bigger model is not a safer one.** Pro, the larger of the two
+DeepSeek models, cleared one more false alarm than Flash, and lowered the
+severity of more attacks: 9 against Flash's 4 with the hardened prompt. The
+verdicts held and the guards put every severity back, so it is the
+deterministic defences, not model size, that make the result safe.
 
 **For a weak model, the deterministic defences are what count.** Telling
 Qwen not to obey changed nothing (68% either way). Keyword guards cut it to
 24%, and `strict` mode, built after the first run showed fooled models citing
 the attacker's own text, cut it to 2%. Against DeepSeek the guards had
 nothing to catch, and strict mode cost it two false alarms cleared.
+
+### DeepSeek V4 Pro
+
+Full report: [results/deepseek-v4-pro.md](results/deepseek-v4-pro.md).
+Model `deepseek-v4-pro`, through the same reseller as Flash, with the same
+caveat: the reseller's model could not be independently verified.
+
+**As safe as Flash on the verdict.** No real attack dismissed in any mode, no
+attack dismissed because of a payload, every payload reported, and the
+attacker obeyed 0 times out of 136.
+
+**One better on false alarms.** 11 of 12 cleared with the hardened prompt,
+against Flash's 10: it cleared the CI runner's `curl` that Flash refused. Like
+Flash, it would not clear the monitoring server's port checks, for the same
+reason: the asset record names the host but not its IP address. In strict
+mode it cleared 9, losing the genuine GitHub notification and the internal
+newsletter for the same reason as Flash: no trusted record backs them.
+
+**More severity drift.** With the hardened prompt, a payload lowered the
+severity 9 times, on the PayPal phishing and the fake invoice, from critical
+to high, against 4 for Flash. Guarded and strict modes put all 9 back.
 
 ### DeepSeek V4.1 Flash (v0.2.1)
 
@@ -277,11 +313,9 @@ dismissal).
 
 - Strict mode v2: a cited record must fit the activity (only a scanner may
   scan), and severity can't be lowered without a record either.
-- Write verdicts back to SOAR-Lite incidents and add the triage service to
-  SOC Lab.
 - Dataset v2: asset records carry their IP address (found by DeepSeek), and
   alerts from real lab runs.
-- Compare more models: Kimi K2.5, DeepSeek V4 Pro, Qwen through the cloud.
+- Compare more models: Kimi K2.5, Qwen through the cloud.
 
 ## License
 
