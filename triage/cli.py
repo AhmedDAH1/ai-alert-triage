@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 
 from triage import evaluate, providers
-from triage.engine import MODES, triage
+from triage.engine import ALL_MODES, COUNTERFACTUAL_MODES, MODES, decide, triage
 
 ROOT = Path(__file__).resolve().parent.parent
 DATASET = ROOT / "datasets" / "alerts.jsonl"
@@ -37,6 +37,9 @@ def _provider(args):
 def cmd_alert(args):
     alert = json.loads(Path(args.file).read_text(encoding="utf-8"))
     alert = alert.get("alert", alert)       # accepts a dataset line or a bare alert
+    if args.mode in COUNTERFACTUAL_MODES:
+        print(json.dumps(decide(alert, _provider(args), args.mode).to_dict(), indent=2, ensure_ascii=False))
+        return
     verdict = triage(alert, _provider(args), args.mode)
     print(json.dumps(verdict.to_dict(), indent=2, ensure_ascii=False))
 
@@ -105,7 +108,8 @@ def main(argv=None):
 
     p = sub.add_parser("alert", help="triage one alert")
     p.add_argument("file")
-    p.add_argument("--mode", choices=MODES, default="guarded")
+    p.add_argument("--mode", choices=ALL_MODES, default="guarded",
+                   help="masked and trusted ask a second, masked question when a dismissal is proposed")
     provider_args(p)
     p.set_defaults(func=cmd_alert)
 

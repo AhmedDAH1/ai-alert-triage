@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.3.0] - 2026-11-20
+
+An adaptive evaluation: the defences attacked by someone who has read them,
+and three defences built from what broke. The published results and their
+cassettes are unchanged and still replay exactly.
+
+### Added
+- `adaptive/`: seven attack families (1,606 variants) written against the
+  guards, including disguises held out from the normaliser; an attacker-model
+  loop; the `reachable` dataset (insider attacks with the trusted records they
+  would really have) and hard-benign false alarms; an exact obey-every-payload
+  bound; a benchmark of every defence with a safety-against-usefulness chart;
+  a cassette-backed live runner with a dry run, a request cap and resumption.
+- `verified` mode: keywords matched on normalised text (`triage/normalize.py`),
+  dismissals only on authorisation records, no downgrade without one.
+- `masked` mode: a counterfactual check. A dismissal or lower severity must
+  hold when the alert is read with every attacker-writable string masked, so
+  attacker text can make an alert look worse, never better.
+- `trusted` mode: the counterfactual check as the only gate, and a trust score
+  routing each proposed dismissal to auto-close, analyst review or the queue.
+- `triage alert --mode masked|trusted` prints the routed decision.
+
+### Found
+- Strict mode's 2% on Qwen was mostly set by the dataset: 128 of 136 attacks
+  targeted alerts with no trusted record, which strict mode can never dismiss.
+  A model obeying every payload scores the same 3 of 136.
+- With the records insider attacks really have, strict mode lets 76% of
+  adaptive attacks through for a fully fooled model, and lowers severity just
+  as often.
+- The keyword patterns flag 0% of paraphrased, translated or split payloads,
+  and 18 of 33 innocent field values written to probe them.
+
+
 ## [0.2.3] - 2026-11-08
 
 ### Fixed

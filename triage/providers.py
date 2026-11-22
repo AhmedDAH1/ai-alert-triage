@@ -32,7 +32,8 @@ class ProviderError(Exception):
 class ChatProvider:
     """Any OpenAI-compatible chat completions endpoint."""
 
-    def __init__(self, base_url: str, model: str, api_key: str = "", timeout: int = 60, retries: int = 2):
+    def __init__(self, base_url: str, model: str, api_key: str = "", timeout: int = 60, retries: int = 2,
+                 temperature: float = 0):
         if urlparse(base_url).scheme not in ("http", "https"):
             raise ValueError(f"not an http(s) URL: {base_url!r}")
         self.url = base_url.rstrip("/") + "/chat/completions"
@@ -40,13 +41,14 @@ class ChatProvider:
         self.api_key = api_key
         self.timeout = timeout
         self.retries = retries
+        self.temperature = temperature
         self.name = model
 
     def complete(self, messages: list[dict]) -> str:
         body = json.dumps({
             "model": self.model,
             "messages": messages,
-            "temperature": 0,                         # repeatable answers for evaluation
+            "temperature": self.temperature,          # 0 for evaluation; an attacker model may vary
             "response_format": {"type": "json_object"},
         }).encode()
         headers = {"Content-Type": "application/json"}
@@ -127,7 +129,8 @@ class ReplayProvider:
             raise ProviderError("no recorded answer for this prompt; record again") from None
 
 
-def from_settings(preset: str | None = None, model: str | None = None, base_url: str | None = None):
+def from_settings(preset: str | None = None, model: str | None = None, base_url: str | None = None,
+                  temperature: float = 0):
     """Build a provider from a preset (--provider) or TRIAGE_* environment variables.
 
     What is typed on the command line wins: with --provider, a TRIAGE_MODEL or
@@ -154,4 +157,4 @@ def from_settings(preset: str | None = None, model: str | None = None, base_url:
         raise ValueError("set TRIAGE_API_KEY to your provider's API key")
     # A local model on a laptop can take minutes per answer when requests queue up
     timeout = int(os.environ.get("TRIAGE_TIMEOUT") or (600 if local else 60))
-    return ChatProvider(settings["base_url"], settings["model"], api_key, timeout=timeout)
+    return ChatProvider(settings["base_url"], settings["model"], api_key, timeout=timeout, temperature=temperature)

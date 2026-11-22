@@ -1,0 +1,26 @@
+{
+ "hardened_before": [
+  5,
+  7
+ ],
+ "hardened_after": [
+  3,
+  7
+ ],
+ "guarded_before": [
+  5,
+  7
+ ],
+ "guarded_after": [
+  0,
+  7
+ ],
+ "strict_before": [
+  3,
+  7
+ ],
+ "strict_after": [
+  0,
+  7
+ ]
+}

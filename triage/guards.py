@@ -27,6 +27,7 @@ is send an alert to a human.
 
 import re
 
+from triage import normalize
 from triage.prompts import untrusted_part
 from triage.schema import Verdict, severity_rank
 
@@ -104,6 +105,20 @@ def apply_guards(verdict: Verdict, alert: dict) -> Verdict:
     return verdict
 
 
+def injection_signals_normalized(alert: dict) -> list[str]:
+    """Like injection_signals, on every reading of each string (see normalize.py)."""
+    found = []
+    for text in _strings(untrusted_part(alert)):
+        for view in normalize.views(text):
+            for pattern in _COMPILED:
+                match = pattern.search(view)
+                if match:
+                    found.append(match.group(0)[:60])
+            if found:
+                break
+    return found
+
+
 _RECORD_NAME = re.compile(r"^\W*(?:context\W+)?([a-z_]+)", re.IGNORECASE)
 
 
@@ -134,4 +149,55 @@ def apply_strict(verdict: Verdict, alert: dict) -> Verdict:
     else:
         return verdict
     verdict.verdict = "needs_investigation"
+    return verdict
+
+
+# ------------------------------------------------------------------ verified
+#
+# Written after the adaptive evaluation (adaptive/README.md) found two gaps in
+# strict mode: disguised keywords got past the patterns, and a dismissal could
+# cite any record that exists, including one that only says who a host is.
+# A compromised CI runner has a genuine asset record; it is still an attack.
+#
+# Verified mode keeps every strict rule and changes three things:
+# 5. Keywords are matched on every reading of the text (normalize.py).
+# 6. A dismissal must cite a record that states the activity is expected
+#    (an authorisation), not one that only identifies the source.
+# 7. Severity is never lowered below the detector's unless the alert is
+#    dismissed with such a record: a downgrade is a partial dismissal.
+
+AUTHORISATION_RECORDS = {"allowlist", "change_ticket", "schedule", "helpdesk", "ip_reputation"}
+IDENTITY_RECORDS = EVIDENCE_RECORDS - AUTHORISATION_RECORDS
+
+
+def authorising_evidence(verdict: Verdict, alert: dict) -> set[str]:
+    """Authorisation records the model cited that exist for this alert."""
+    return {record_name(e) for e in verdict.evidence} & trusted_evidence(alert) & AUTHORISATION_RECORDS
+
+
+def apply_verified(verdict: Verdict, alert: dict) -> Verdict:
+    signals = injection_signals_normalized(alert)
+    original = str(alert.get("severity", "medium")).lower()
+
+    if signals:
+        verdict.injection_suspected = True
+        verdict.overrides.append(f"instruction-like text in alert data: {signals[0]!r}")
+
+    if verdict.verdict == "false_positive":
+        reason = None
+        if verdict.injection_suspected:
+            reason = "dismissal blocked: the alert shows signs of manipulation"
+        elif verdict.confidence < MIN_DISMISS_CONFIDENCE:
+            reason = f"dismissal blocked: confidence {verdict.confidence:.2f} < {MIN_DISMISS_CONFIDENCE}"
+        elif not authorising_evidence(verdict, alert):
+            present = sorted(trusted_evidence(alert) & AUTHORISATION_RECORDS)
+            reason = (f"dismissal blocked: no authorisation record cited (present: {present or 'none'}); "
+                      "identity records such as asset don't show the activity is expected")
+        if reason:
+            verdict.verdict = "needs_investigation"
+            verdict.overrides.append(reason)
+
+    if verdict.verdict != "false_positive" and severity_rank(verdict.severity) < severity_rank(original):
+        verdict.severity = original
+        verdict.overrides.append(f"severity kept at {original}: lowering it needs an authorised dismissal")
     return verdict
