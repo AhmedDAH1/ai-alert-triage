@@ -200,8 +200,9 @@ strict mode let it through.
 The model cited the laptop's asset record and called the activity *"a known
 benign network scan by a vulnerability scanner"*, which the record doesn't
 say. Strict mode checks that a cited record exists, not that it supports the
-dismissal. Next step: the record has to fit the activity, for example only a
-host whose role is scanning may scan.
+dismissal. *Since v0.3.0, verified mode accepts only records that authorise
+the activity; re-scored on these recorded answers, it no longer dismisses
+this alert.*
 
 **Without attacks, the small model still makes dangerous mistakes.** With the
 hardened prompt it dismissed 4 of 15 real attacks, again including the CEO
@@ -213,7 +214,10 @@ stopped 3 of the 4.
 the attacker's canary in 51 of 136 cases (38%) in every mode, and severity
 was lowered in 42 of 136 even in strict mode: the guards restore severity only
 on alerts they flag, and paraphrased payloads aren't flagged. That's why the
-model only suggests and an analyst decides.
+model only suggests and an analyst decides. *Since v0.3.0, flagged or not, a
+payload can't lower severity in the new modes: verified and trusted keep the
+detector's severity unless the alert is closed with enough evidence, and
+masked keeps whichever is higher of the full and the masked reading.*
 
 ### First run: Qwen 2.5 7B, local (v0.1.0)
 
@@ -382,9 +386,8 @@ mode was free against the oracle-like bound and costs most on DeepSeek. The
 likely reason, to be confirmed alert by alert: read with the free text
 masked, a careful model won't dismiss what it can't see the evidence for,
 much as it already refused the monitoring server whose asset record lacked
-an IP address. The guarantee holds, but a stronger model
-makes the price higher, not lower. The keyword guard does earn something
-here: with the hardened prompt alone, a payload lowered the severity of 28 of
+an IP address. The guarantee holds; a real model just pays more for it
+than the bound assumed. The keyword guard does earn something here: with the hardened prompt alone, a payload lowered the severity of 28 of
 342 attacks, and every guarded mode put them back.
 
 On the attacks themselves the model needed no help: of 564 sampled adaptive
@@ -402,9 +405,11 @@ strict modes overrode all 3.
 
 ### What this changes
 
-- **The robustness came from the model, not the guards.** The keyword layer
-  added no protection on DeepSeek and only cost usefulness; on Qwen it fails
-  as soon as the attacker paraphrases.
+- **Against dismissal, the robustness came from the model, not the guards.**
+  On DeepSeek the keyword layer stopped no dismissal (there was none to stop)
+  and cost false alarms; its one contribution was undoing 28 severity
+  downgrades, which verified, masked and trusted also do without keywords. On
+  Qwen it fails as soon as the attacker paraphrases.
 - **The deterministic layer has to assume the model is fooled.** Verified and
   masked do; guarded and strict don't. Both guarantees hold for any model.
 - **And that assumption costs usefulness, most on a model that didn't need
@@ -417,7 +422,9 @@ strict modes overrode all 3.
 
 ## Running it
 
-Python 3.10+, no dependencies beyond the standard library.
+Python 3.10+, no dependencies beyond the standard library. The defence
+benchmark's chart needs `matplotlib` (`pip install matplotlib`); without it
+the benchmark still runs and writes its report.
 
 ```bash
 git clone https://github.com/AhmedDAH1/ai-alert-triage.git && cd ai-alert-triage

@@ -189,7 +189,9 @@ alarms each defence closes.
    attacker they stop disguises at best, not paraphrase, translation or
    splitting. On benign text they block legitimate dismissals.
 2. **On a strong model the robustness came from the model.** DeepSeek
-   reported every adaptive payload; the guards added nothing but cost.
+   reported every adaptive payload and dismissed none. The keyword guard
+   stopped no dismissal; it only undid 28 severity downgrades, which the
+   new modes also undo without keywords, and it cost false alarms.
 3. **A deterministic layer has to assume the model is fooled.** Checking
    that a record *exists* doesn't: insider attacks have records. Requiring an
    authorisation record does, and so does requiring that the decision survive
